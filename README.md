@@ -11,6 +11,15 @@
   - [STAC API - Collections](https://github.com/radiantearth/stac-api-spec/tree/main/ogcapi-features)
 - **Owner**: @jonhealy1
 
+## Introduction
+
+This extension enables a **Federated STAC API** architecture. It transforms the API Root into a "Catalog of Catalogs" (Portal), allowing a single API to serve as a registry for multiple independent data providers.
+
+In this model, the API has a fixed-depth "Hub and Spoke" structure:
+1.  **Global Root (`/`)**: The entry point. Contains links to Sub-Catalogs.
+2.  **The Registry (`/catalogs`)**: A machine-readable list of all available Sub-Catalogs.
+3.  **Sub-Catalogs (`/catalogs/{id}`)**: The actual data providers. These behave as standard STAC API Landing Pages containing Collections.
+
 ## Endpoints
 
 This extension introduces a new root path `/catalogs` and nests standard STAC API endpoints under specific catalog IDs.
@@ -127,3 +136,14 @@ The global root acts as a portal. Note that `rel="data"` points to the catalogs 
   ]
 }
 ```
+
+## Optional Capabilities
+
+### Filter Extension & Queryables
+
+This extension reserves the path `/catalogs/{catalogId}/queryables` to support the **STAC Filter Extension** within a sub-catalog context.
+
+However, implementation of this endpoint is **OPTIONAL**.
+
+* A sub-catalog **MUST** only expose this endpoint if it advertises conformance to the Filter Extension URI (e.g., `https://api.stacspec.org/v1.0.0-rc.2/filter`) in the Sub-Catalog Landing Page (`/catalogs/{catalogId}`).
+* If implemented, the queryables response must be scoped specifically to that sub-catalog.
