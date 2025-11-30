@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: STAC API Catalogs Extension
+  version: 1.0.0-proposal
+  description: |
+    An extension to support a federated "Hub and Spoke" model. 
+    It allows a root STAC API to act as a registry for multiple sub-catalogs.
+paths:
+  # ----------------------------------------------------------------------
+  # 1. THE REGISTRY LIST
+  # ----------------------------------------------------------------------
+  /catalogs:
+    get:
+      summary: List available sub-catalogs
+      operationId: getCatalogs
+      responses:
+        '200':
+          description: A list of catalogs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogsList'
+
+  # ----------------------------------------------------------------------
+  # 2. THE SUB-CATALOG LANDING PAGE
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+    get:
+      summary: Get the Landing Page for a specific sub-catalog
+      operationId: getCatalog
+      responses:
+        '200':
+          description: A STAC Landing Page scoped to this catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandingPage'
+
+  # ----------------------------------------------------------------------
+  # 3. SUB-CATALOG CONFORMANCE (Added to match README)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/conformance:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+    get:
+      summary: Get conformance classes for this specific sub-catalog
+      operationId: getCatalogConformance
+      responses:
+        '200':
+          description: STAC/OGC Conformance classes
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ----------------------------------------------------------------------
+  # 4. SCOPED COLLECTIONS
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/collections:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+    get:
+      summary: List collections within a specific sub-catalog
+      operationId: getCatalogCollections
+      responses:
+        '200':
+          description: A STAC Collections object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collections'
+
+  # ----------------------------------------------------------------------
+  # 5. SCOPED SINGLE COLLECTION (Added to match README)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/collections/{collectionId}:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+      - $ref: '#/components/parameters/collectionId'
+    get:
+      summary: Get a specific collection definition
+      operationId: getCatalogCollection
+      responses:
+        '200':
+          description: A STAC Collection object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+
+  # ----------------------------------------------------------------------
+  # 6. SCOPED ITEMS (Search)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/collections/{collectionId}/items:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+      - $ref: '#/components/parameters/collectionId'
+    get:
+      summary: Get items from a collection within a sub-catalog
+      operationId: getCatalogCollectionItems
+      responses:
+        '200':
+          description: A STAC FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureCollection'
+
+  # ----------------------------------------------------------------------
+  # 7. SCOPED SINGLE ITEM (Added to match README)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/collections/{collectionId}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+      - $ref: '#/components/parameters/collectionId'
+      - name: itemId
+        in: path
+        required: true
+        schema: 
+          type: string
+    get:
+      summary: Get a single item
+      operationId: getCatalogItem
+      responses:
+        '200':
+          description: A STAC Item (Feature)
+          content:
+            application/geo+json:
+              schema:
+                $ref: '#/components/schemas/Item'
+
+components:
+  parameters:
+    catalogId:
+      name: catalogId
+      in: path
+      description: The unique identifier of the sub-catalog
+      required: true
+      schema:
+        type: string
+    collectionId:
+      name: collectionId
+      in: path
+      description: The unique identifier of the collection
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    CatalogsList:
+      type: object
+      required:
+        - catalogs
+        - links
+      properties:
+        catalogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Catalog'
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+
+    # Placeholders for Standard STAC Objects
+    Catalog:
+      type: object
+      description: A standard STAC Catalog object
+    LandingPage:
+      type: object
+      description: A standard STAC Landing Page object
+    Collections:
+      type: object
+      description: A standard STAC Collections object
+    Collection:
+      type: object
+      description: A standard STAC Collection object
+    FeatureCollection:
+      type: object
+      description: A GeoJSON FeatureCollection
+    Item:
+      type: object
+      description: A STAC Item
+    Link:
+      type: object
+      required:
+        - rel
+        - href
+      properties:
+        rel:
+          type: string
+        href:
+          type: string
