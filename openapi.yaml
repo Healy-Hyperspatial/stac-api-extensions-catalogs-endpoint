@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
-  title: STAC API Catalogs Extension
+  title: STAC API Catalogs Endpoint Extension
   version: 1.0.0-proposal
   description: |
-    An extension to support a federated "Hub and Spoke" model. 
-    It allows a root STAC API to act as a registry for multiple sub-catalogs.
+    An extension that adds a dedicated `/catalogs` endpoint to support a federated 
+    "Hub and Spoke" model. It allows a STAC API to act as a registry for multiple 
+    independent sub-catalogs without altering the standard behavior of the API Root.
 paths:
   # ----------------------------------------------------------------------
   # 1. THE REGISTRY LIST
@@ -39,7 +40,7 @@ paths:
                 $ref: '#/components/schemas/LandingPage'
 
   # ----------------------------------------------------------------------
-  # 3. SUB-CATALOG CONFORMANCE (Added to match README)
+  # 3. SUB-CATALOG CONFORMANCE
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/conformance:
     parameters:
@@ -73,7 +74,7 @@ paths:
                 $ref: '#/components/schemas/Collections'
 
   # ----------------------------------------------------------------------
-  # 5. SCOPED SINGLE COLLECTION (Added to match README)
+  # 5. SCOPED SINGLE COLLECTION
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}:
     parameters:
@@ -109,7 +110,7 @@ paths:
                 $ref: '#/components/schemas/FeatureCollection'
 
   # ----------------------------------------------------------------------
-  # 7. SCOPED SINGLE ITEM (Added to match README)
+  # 7. SCOPED SINGLE ITEM
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}/items/{itemId}:
     parameters:
@@ -132,7 +133,7 @@ paths:
                 $ref: '#/components/schemas/Item'
 
   # ----------------------------------------------------------------------
-  # 8. SUB-CATALOG QUERYABLES (Critical for Filter Extension)
+  # 8. SUB-CATALOG QUERYABLES (Optional)
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/queryables:
     parameters:
@@ -228,3 +229,6 @@ components:
           type: string
         href:
           type: string
+      Queryables:
+        type: object
+        description: A JSON Schema object for queryables
