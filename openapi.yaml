@@ -6,9 +6,12 @@ info:
     An extension that adds a dedicated `/catalogs` endpoint to support a federated 
     "Hub and Spoke" model. It allows a STAC API to act as a registry for multiple 
     independent sub-catalogs without altering the standard behavior of the API Root.
+    
+    Includes "Safety-First" transaction logic where deletions via this endpoint 
+    are strictly organizational (unlinking) and never destructive to data.
 paths:
   # ----------------------------------------------------------------------
-  # 1. THE REGISTRY LIST
+  # 1. THE REGISTRY LIST (Root Catalogs)
   # ----------------------------------------------------------------------
   /catalogs:
     get:
@@ -21,9 +24,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogsList'
+    post:
+      summary: Register a new Root Catalog
+      operationId: createCatalog
+      requestBody:
+        description: The Catalog definition
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Catalog'
+      responses:
+        '201':
+          description: Catalog created successfully
+          headers:
+            Location:
+              description: The location of the created catalog
+              schema:
+                type: string
 
   # ----------------------------------------------------------------------
-  # 2. THE SUB-CATALOG LANDING PAGE
+  # 2. THE SUB-CATALOG LANDING PAGE & DISBAND
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}:
     parameters:
@@ -38,9 +59,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LandingPage'
+    delete:
+      summary: Disband a Catalog
+      description: |
+        Deletes the Catalog resource. All child collections and sub-catalogs are 
+        UNLINKED but NOT DELETED. Orphaned children are adopted by the root.
+      operationId: deleteCatalog
+      responses:
+        '204':
+          description: Catalog deleted (disbanded) successfully
 
   # ----------------------------------------------------------------------
-  # 3. SUB-CATALOG CONFORMANCE
+  # 3. SUB-CATALOG MANAGEMENT (Hierarchy)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/catalogs:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+    get:
+      summary: List sub-catalogs of this catalog
+      description: Returns only the child catalogs (hierarchy traversal).
+      operationId: getSubCatalogs
+      responses:
+        '200':
+          description: A list of sub-catalogs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogsList'
+    post:
+      summary: Create a Sub-Catalog
+      description: Creates a new catalog and links it as a child of {catalogId}.
+      operationId: createSubCatalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Catalog'
+      responses:
+        '201':
+          description: Sub-Catalog created and linked
+
+  /catalogs/{catalogId}/catalogs/{subCatalogId}:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+      - $ref: '#/components/parameters/subCatalogId'
+    delete:
+      summary: Unlink a Sub-Catalog
+      description: |
+        Removes the link between the parent and sub-catalog. 
+        The sub-catalog resource is NOT deleted.
+      operationId: unlinkSubCatalog
+      responses:
+        '204':
+          description: Sub-Catalog unlinked successfully
+
+  # ----------------------------------------------------------------------
+  # 4. CHILDREN EXTENSION (Mixed Content)
+  # ----------------------------------------------------------------------
+  /catalogs/{catalogId}/children:
+    parameters:
+      - $ref: '#/components/parameters/catalogId'
+      - name: type
+        in: query
+        description: Filter children by type (Catalog or Collection)
+        schema:
+          type: string
+          enum: [Catalog, Collection]
+    get:
+      summary: Get all children (Catalogs and Collections)
+      operationId: getCatalogChildren
+      responses:
+        '200':
+          description: A list of child resources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildrenList'
+
+  # ----------------------------------------------------------------------
+  # 5. SUB-CATALOG CONFORMANCE
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/conformance:
     parameters:
@@ -57,7 +155,7 @@ paths:
                 type: object
 
   # ----------------------------------------------------------------------
-  # 4. SCOPED COLLECTIONS
+  # 6. SCOPED COLLECTIONS MANAGEMENT
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections:
     parameters:
@@ -72,9 +170,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Collections'
+    post:
+      summary: Create a Collection in this Catalog
+      description: Creates a collection and links it as a child of {catalogId}.
+      operationId: createCatalogCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Collection'
+      responses:
+        '201':
+          description: Collection created and linked
 
   # ----------------------------------------------------------------------
-  # 5. SCOPED SINGLE COLLECTION
+  # 7. SCOPED SINGLE COLLECTION
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}:
     parameters:
@@ -90,9 +201,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Collection'
+    delete:
+      summary: Unlink a Collection
+      description: |
+        Removes the link between the catalog and collection. 
+        The Collection data is NEVER deleted via this route.
+      operationId: unlinkCatalogCollection
+      responses:
+        '204':
+          description: Collection unlinked successfully
 
   # ----------------------------------------------------------------------
-  # 6. SCOPED ITEMS (Search)
+  # 8. SCOPED ITEMS (Search)
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}/items:
     parameters:
@@ -110,7 +230,7 @@ paths:
                 $ref: '#/components/schemas/FeatureCollection'
 
   # ----------------------------------------------------------------------
-  # 7. SCOPED SINGLE ITEM
+  # 9. SCOPED SINGLE ITEM
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}/items/{itemId}:
     parameters:
@@ -133,7 +253,7 @@ paths:
                 $ref: '#/components/schemas/Item'
 
   # ----------------------------------------------------------------------
-  # 8. SUB-CATALOG QUERYABLES (Optional)
+  # 10. SUB-CATALOG QUERYABLES (Optional)
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/queryables:
     parameters:
@@ -150,7 +270,7 @@ paths:
                 $ref: '#/components/schemas/Queryables'
 
   # ----------------------------------------------------------------------
-  # 9. SCOPED COLLECTION QUERYABLES
+  # 11. SCOPED COLLECTION QUERYABLES
   # ----------------------------------------------------------------------
   /catalogs/{catalogId}/collections/{collectionId}/queryables:
     parameters:
@@ -176,6 +296,13 @@ components:
       required: true
       schema:
         type: string
+    subCatalogId:
+      name: subCatalogId
+      in: path
+      description: The unique identifier of the child sub-catalog
+      required: true
+      schema:
+        type: string
     collectionId:
       name: collectionId
       in: path
@@ -195,6 +322,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Catalog'
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+    
+    ChildrenList:
+      type: object
+      required:
+        - children
+        - links
+      properties:
+        children:
+          type: array
+          items:
+            # Polymorphic schema (can be Catalog or Collection)
+            type: object 
         links:
           type: array
           items:
