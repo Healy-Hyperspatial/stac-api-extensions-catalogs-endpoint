@@ -86,19 +86,26 @@ Implementations supporting the Transaction endpoints MUST adhere to the followin
 
 ### 3. Catalog Deletion (`DELETE /catalogs/{id}`)
 * **Behavior (Disband):**
-    * The Catalog object is deleted from the database.
-    * All Child Collections linked to this catalog are **Unlinked** (the catalog ID is removed from their parent list).
-    * **Adoption:** If an unlinked collection has no other parents (orphaned), it MUST be automatically adopted by the Root Catalog (or Landing Page) to ensure data is preserved.
-    * **Constraint:** This operation MUST NOT delete Collection or Item data. The `cascade` parameter is NOT supported.
+    * The Catalog object `{id}` is deleted from the database.
+    * All Child Collections **AND Child Sub-Catalogs** linked to this catalog are **Unlinked**.
+    * **Adoption:** If an unlinked child (Collection or Catalog) has no other parents, it MUST be automatically adopted by the Root Catalog to ensure data/structure is preserved.
+    * **Constraint:** This operation MUST NOT delete Collection or Item data.
+ 
+### 4. Sub-Catalog Unlinking (`DELETE /catalogs/{id}/catalogs/{subId}`)
+* **Behavior (Unlink):**
+    * The Sub-Catalog `{subId}` is **Unlinked** from the parent Catalog `{id}`.
+    * **Safety:** The Sub-Catalog resource itself is **NOT deleted**.
+    * **Adoption:** If the Sub-Catalog has no other parents (orphaned), it MUST be automatically adopted by the Root Catalog to ensure it remains discoverable.
+    * **Constraint:** This operation only removes the specific hierarchical link between `{id}` and `{subId}`.
 
-### 4. Scoped Collection Creation (`POST /catalogs/{id}/collections`)
+### 5. Scoped Collection Creation (`POST /catalogs/{id}/collections`)
 * **Body:** Accepts a standard [STAC Collection](https://github.com/radiantearth/stac-spec/blob/master/collection-spec/collection-spec.md) JSON object.
 * **Behavior:**
     1.  Creates the Collection resource (or updates links if it exists).
     2.  **Automatic Linking:** Automatically registers the Collection as a child of `{catalogId}`.
     3.  **Reverse Linking:** Automatically adds a `rel="child"` link in the Catalog pointing to the new Collection.
 
-### 5. Scoped Collection Deletion (`DELETE .../collections/{id}`)
+### 6. Scoped Collection Deletion (`DELETE .../collections/{id}`)
 * **Behavior (Unlink):**
     * The Collection is **Unlinked** from the specific catalog `{catalogId}`.
     * If the Collection belongs to other catalogs, those links remain.
