@@ -28,6 +28,9 @@ In this model, the API has a fixed-depth "Hub and Spoke" structure:
 ### Safety-First Architecture
 A core tenet of this extension is **Data Safety**. The `/catalogs` endpoints are strictly for **Organization**, while the core `/collections` endpoints are reserved for **Destruction**. Operations performed via the catalogs endpoint (like deleting a catalog) are guaranteed to never result in the accidental loss of Collection or Item data.
 
+**Note on Dynamic Linking:**
+To ensure data consistency and reduce storage overhead, implementations SHOULD generate hierarchical links (e.g., `rel="child"`, `rel="parent"`) dynamically at runtime based on the requested endpoint context, rather than persisting static link objects in the database.
+
 ## Endpoints
 
 ### Discovery (Read-Only)
@@ -36,8 +39,9 @@ A core tenet of this extension is **Data Safety**. The `/catalogs` endpoints are
 | `GET` | `/catalogs` | **The Registry.** Lists all available sub-catalogs. |
 | `GET` | `/catalogs/{catalogId}` | **Sub-Catalog Root.** Acts as the Landing Page for the provider. |
 | `GET` | `/catalogs/{catalogId}/conformance` | Conformance classes specific to this sub-catalog. |
-| `GET` | `/catalogs/{catalogId}/children` | **Children.** Lists all child resources (Catalogs and Collections). Supports filtering via `?type=Catalog` or `?type=Collection`. |
 | `GET` | `/catalogs/{catalogId}/queryables` | Filter Extension. Lists fields available for filtering in this sub-catalog. |
+| `GET` | `/catalogs/{catalogId}/children` | **Children.** Lists all child resources (Catalogs and Collections). Supports filtering via `?type=Catalog` or `?type=Collection`. |
+| `GET` | `/catalogs/{catalogId}/catalogs` | **Sub-Catalogs List.** Lists only the child catalogs of this catalog (for hierarchy traversal). |
 | `GET` | `/catalogs/{catalogId}/collections` | Lists collections belonging to this sub-catalog. |
 | `GET` | `/catalogs/{catalogId}/collections/{collectionId}` | Gets a specific collection definition. |
 | `GET` | `/catalogs/{catalogId}/collections/{collectionId}/items` | **Item Search.** Fetches items from this specific collection. |
@@ -48,8 +52,10 @@ These endpoints allow for the dynamic creation and deletion of the federation st
 
 | Method | URI | Description |
 | :--- | :--- | :--- |
-| `POST` | `/catalogs` | **Create Catalog.** Registers a new sub-catalog. |
+| `POST` | `/catalogs` | **Create Root Catalog.** Registers a new top-level catalog. |
 | `DELETE` | `/catalogs/{catalogId}` | **Disband Catalog.** Removes a sub-catalog. **Safety: Never deletes linked collections.** |
+| `POST` | `/catalogs/{catalogId}/catalogs` | **Create Sub-Catalog.** Creates a new catalog and links it as a child of this catalog. |
+| `DELETE` | `/catalogs/{catalogId}/catalogs/{subCatalogId}` | **Unlink Sub-Catalog.** Removes the link to the sub-catalog. **Safety: Does not delete the sub-catalog.** |
 | `POST` | `/catalogs/{catalogId}/collections` | **Create Collection.** Creates a collection and links it to this catalog. |
 | `DELETE` | `/catalogs/{catalogId}/collections/{collectionId}` | **Unlink Collection.** Removes the link from the parent catalog. **Safety: Never deletes the collection data.** |
 
@@ -70,21 +76,29 @@ Implementations supporting the Transaction endpoints MUST adhere to the followin
 * **Body:** Accepts a standard [STAC Catalog](https://github.com/radiantearth/stac-spec/blob/master/catalog-spec/catalog-spec.md) JSON object.
 * **Behavior:** The API creates the Catalog resource and makes it available in the `/catalogs` registry list.
 
-### 2. Catalog Deletion (`DELETE /catalogs/{id}`)
+### 2. Sub-Catalog Creation (`POST /catalogs/{id}/catalogs`)
+* **Body:** Accepts a standard STAC Catalog JSON object.
+* **Behavior:**
+    1.  Creates the new Catalog resource.
+    2.  **Automatic Linking:** Automatically registers the new Catalog as a child of `{id}`.
+    3.  **Reverse Linking:** Automatically adds a `rel="child"` link in the parent Catalog `{id}` pointing to the new sub-catalog.
+    4.  **Result:** The new catalog is discoverable via `GET /catalogs/{id}/catalogs` AND via the global registry `GET /catalogs` (unless explicitly hidden).
+
+### 3. Catalog Deletion (`DELETE /catalogs/{id}`)
 * **Behavior (Disband):**
     * The Catalog object is deleted from the database.
     * All Child Collections linked to this catalog are **Unlinked** (the catalog ID is removed from their parent list).
     * **Adoption:** If an unlinked collection has no other parents (orphaned), it MUST be automatically adopted by the Root Catalog (or Landing Page) to ensure data is preserved.
     * **Constraint:** This operation MUST NOT delete Collection or Item data. The `cascade` parameter is NOT supported.
 
-### 3. Scoped Collection Creation (`POST /catalogs/{id}/collections`)
+### 4. Scoped Collection Creation (`POST /catalogs/{id}/collections`)
 * **Body:** Accepts a standard [STAC Collection](https://github.com/radiantearth/stac-spec/blob/master/collection-spec/collection-spec.md) JSON object.
 * **Behavior:**
     1.  Creates the Collection resource (or updates links if it exists).
     2.  **Automatic Linking:** Automatically registers the Collection as a child of `{catalogId}`.
     3.  **Reverse Linking:** Automatically adds a `rel="child"` link in the Catalog pointing to the new Collection.
 
-### 4. Scoped Collection Deletion (`DELETE .../collections/{id}`)
+### 5. Scoped Collection Deletion (`DELETE .../collections/{id}`)
 * **Behavior (Unlink):**
     * The Collection is **Unlinked** from the specific catalog `{catalogId}`.
     * If the Collection belongs to other catalogs, those links remain.
