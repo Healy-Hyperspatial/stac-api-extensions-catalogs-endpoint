@@ -130,6 +130,24 @@ This resource acts as the **Landing Page** for the provider.
 - `rel="data"`: MUST point to `/catalogs/{catalogId}/collections`.
 - `rel="children"`: MUST point to `/catalogs/{catalogId}/children` (if Children extension is implemented).
 
+### 4. The Scoped Collection Endpoints (`/catalogs/{catalogId}/collections/{collectionId}/*`)
+This resource, and all of its sub-resources, represents a Collection within the context of a specific Catalog.
+- `rel="alternate"`: MAY be provided to point to the corresponding `/collections/{collectionId}/*` endpoints, and vice versa.
+
+> [!NOTE]
+> All sub-resources can be considered, accordingly to other STAC API extensions that are implemented.
+> For example, if the [Filter](https://github.com/stac-api-extensions/filter) extension
+> is implemented and supports [Queryables](https://github.com/stac-api-extensions/filter#queryables),
+> then `rel="alternate"` links MAY be included in corresponding responses as well:
+> - `/catalogs/{catalogId}/collections/{collectionId}/queryables`
+> - `/collections/{collectionId}/queryables`
+> - `/queryables?collections={collectionId}`
+
+> [!NOTE]
+> The `rel="alternate"` link is optional to allow implementation omitting the reference if such endpoint should be protected
+> and hidden from clients. Otherwise, it is RECOMMENDED to provide this link for better interoperability and discoverability
+> of clients that are typically aware of the core STAC API structure.
+
 ## Response Examples
 
 ### 1. The Registry List (`GET /catalogs`)
