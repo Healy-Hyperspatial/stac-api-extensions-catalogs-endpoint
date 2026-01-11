@@ -63,9 +63,9 @@ These endpoints allow for the dynamic creation and deletion of the federation st
 | `POST` | `/catalogs` | **Create Root Catalog.** Registers a new top-level catalog. |
 | `PUT`  | `/catalogs/{catalogId}` | **Update Catalog.** Updates metadata (Title, Description). **Safety: Preserves existing hierarchy links.** |
 | `DELETE` | `/catalogs/{catalogId}` | **Disband Catalog.** Removes a sub-catalog. **Safety: Never deletes linked collections.** |
-| `POST` | `/catalogs/{catalogId}/catalogs` | **Create Sub-Catalog.** Creates a new catalog and links it as a child of this catalog. |
+| `POST` | `/catalogs/{catalogId}/catalogs` | **Link or Create Sub-Catalog.** Links an existing catalog OR creates a new one. |
 | `DELETE` | `/catalogs/{catalogId}/catalogs/{subCatalogId}` | **Unlink Sub-Catalog.** Removes the link to the sub-catalog. **Safety: Does not delete the sub-catalog.** |
-| `POST` | `/catalogs/{catalogId}/collections` | **Create Collection.** Creates a collection and links it to this catalog. |
+| `POST` | `/catalogs/{catalogId}/collections` | **Link or Create Collection.** Links an existing collection OR creates a new one. |
 | `DELETE` | `/catalogs/{catalogId}/collections/{collectionId}` | **Unlink Collection.** Removes the link from the parent catalog. **Safety: Never deletes the collection data.** |
 
 ## Poly-Hierarchy (Multi-Parenting)
@@ -91,12 +91,22 @@ Implementations supporting the Transaction endpoints MUST adhere to the followin
 * **Safety:** This operation MUST NOT modify the structural links (`parent_ids`) of the catalog unless explicitly handled, ensuring the catalog remains in its current hierarchy.
 
 ### 3. Sub-Catalog Creation (`POST /catalogs/{id}/catalogs`)
-* **Body:** Accepts a standard STAC Catalog JSON object.
+
+This endpoint supports two distinct modes of operation: **Creation** and **Linking**.
+
+#### Mode A: Creation (Full Body)
+* **Body:** A full [STAC Catalog](https://github.com/radiantearth/stac-spec/blob/master/catalog-spec/catalog-spec.md) JSON object.
+* **Condition:** The `id` in the body does not currently exist in the database.
+* **Behavior:** Creates a new Catalog and links it as a child of `{catalogId}`.
+
+#### Mode B: Linking (Reference Only)
+* **Body:** A JSON object containing only the `id`. Example: `{"id": "existing-catalog-id"}`.
+* **Condition:** The `id` already exists in the database.
 * **Behavior:**
-    1.  Creates the new Catalog resource.
-    2.  **Automatic Linking:** Automatically registers the new Catalog as a child of `{id}`.
-    3.  **Reverse Linking:** Automatically adds a `rel="child"` link in the parent Catalog `{id}` pointing to the new sub-catalog.
-    4.  **Result:** The new catalog is discoverable via `GET /catalogs/{id}/catalogs` AND via the global registry `GET /catalogs` (unless explicitly hidden).
+    1.  **Establishes Reciprocal Links:** Adds `{catalogId}` to the sub-catalog's parent list, AND adds a `rel="child"` link to the parent Catalog pointing to the sub-catalog.
+    2.  Returns `200 OK` to indicate a successful link.
+    3.  **Error Handling:** If the `id` does not exist when using this minimal payload, the API MUST return `404 Not Found`.
+    4.  **Cycle Prevention:** Implementations SHOULD reject links that create a circular reference (e.g., linking a parent as a child of itself).
 
 ### 4. Catalog Deletion (`DELETE /catalogs/{id}`)
 * **Behavior (Disband):**
@@ -113,18 +123,33 @@ Implementations supporting the Transaction endpoints MUST adhere to the followin
     * **Constraint:** This operation only removes the specific hierarchical link between `{id}` and `{subId}`.
 
 ### 6. Scoped Collection Creation (`POST /catalogs/{id}/collections`)
-* **Body:** Accepts a standard [STAC Collection](https://github.com/radiantearth/stac-spec/blob/master/collection-spec/collection-spec.md) JSON object.
-* **Behavior:**
-    1.  Creates the Collection resource (or updates links if it exists).
-    2.  **Automatic Linking:** Automatically registers the Collection as a child of `{catalogId}`.
-    3.  **Reverse Linking:** Automatically adds a `rel="child"` link in the Catalog pointing to the new Collection.
 
-### 7. Scoped Collection Deletion (`DELETE .../collections/{id}`)
-* **Behavior (Unlink):**
-    * The Collection is **Unlinked** from the specific catalog `{catalogId}`.
-    * If the Collection belongs to other catalogs, those links remain.
-    * If the Collection belongs **only** to this catalog, it becomes an orphan and MUST be automatically adopted by the Root Catalog.
-    * **Constraint:** This operation MUST NOT delete Collection or Item data. To delete data, the client must use the core `/collections/{id}` endpoint.
+This endpoint supports two distinct modes of operation: **Creation** and **Linking**.
+
+#### Mode A: Creation (Full Body)
+* **Body:** A full [STAC Collection](https://github.com/radiantearth/stac-spec/blob/master/collection-spec/collection-spec.md) JSON object.
+* **Condition:** The `id` in the body does not currently exist in the database.
+* **Behavior:** Creates a new Collection and links it as a child of `{catalogId}`.
+
+#### Mode B: Linking (Reference Only)
+* **Body:** A JSON object containing only the `id`. Example: `{"id": "existing-collection-id"}`.
+* **Condition:** The `id` already exists in the database.
+* **Behavior:**
+    1.  Does **not** overwrite the existing collection metadata.
+    2.  **Establishes Reciprocal Links:** Adds `{catalogId}` to the collection's parent list, AND adds a `rel="child"` link to the Catalog pointing to the collection.
+    3.  Returns `200 OK` to indicate a successful link (vs `201 Created` for new resources).
+    4.  **Error Handling:** If the `id` does not exist when using this minimal payload, the API MUST return `404 Not Found`.
+
+### 7. Scoped Collection Deletion (`DELETE /catalogs/{catalogId}/collections/{collectionId}`)
+
+This operation is strictly an **Unlink** action. It modifies the hierarchy but **never destroys data**.
+
+* **Behavior:**
+    1.  Removes `{catalogId}` from the collection's list of parents.
+    2.  Removes the `rel="child"` link from the Catalog `{catalogId}`.
+    3.  **Adoption Logic:** If the collection has **no other parents** after this operation (i.e., it was only linked to this one catalog), it MUST be automatically linked to the **Root Catalog**. This ensures no data becomes "orphaned" or undiscoverable.
+* **Response:** Returns `204 No Content`.
+* **Safety Guarantee:** This endpoint **MUST NOT** delete the Collection resource or its Items from the database. To permanently destroy a collection, the client must use the core `DELETE /collections/{collectionId}` endpoint.
 
 ## Link Relations
 
